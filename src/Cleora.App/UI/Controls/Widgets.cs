@@ -198,7 +198,8 @@ namespace Cleora.App.UI.Controls
 
             var max = Math.Max(1, _rows.Max(r => r.Bytes));
             var labelWidth = Math.Min(S(240), Width / 3);
-            var sizeWidth = S(84);
+            // As wide as the longest size label in bold, so "182,4 GB" is never cut.
+            var sizeWidth = _rows.Max(r => TextRenderer.MeasureText(g, Sizes.Format(r.Bytes), Theme.BodyBold).Width) + S(6);
             var flags = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter;
             for (var i = 0; i < _rows.Count; i++)
             {
