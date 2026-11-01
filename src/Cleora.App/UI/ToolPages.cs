@@ -74,9 +74,14 @@ namespace Cleora.App.UI
 
         protected override void FitContent(int bodyWidth)
         {
+            // Called while the constructor is still adding cards: each control may not exist yet.
             if (Folders != null)
             {
                 Folders.Width = bodyWidth;
+            }
+
+            if (List != null)
+            {
                 List.Width = bodyWidth;
                 List.Columns[2].Width = Math.Max(160, bodyWidth - List.Columns[0].Width - List.Columns[1].Width - List.Columns[3].Width - 30);
             }
