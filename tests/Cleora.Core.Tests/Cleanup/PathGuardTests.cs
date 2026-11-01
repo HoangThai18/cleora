@@ -48,12 +48,21 @@ namespace Cleora.Core.Tests.Cleanup
         }
 
         [Fact]
+        public void WindowsOld_OnARealDriveRoot_IsNotASafeFileRoot()
+        {
+            using var scratch = new Scratch();
+            var drive = Path.GetPathRoot(Path.GetTempPath())!;
+
+            Assert.False(PathGuard.IsSafeRoot(CleanupRoot.All(Path.Combine(drive, "Windows.old")), scratch.Folders));
+        }
+
+        [Fact]
         public void Catalog_EveryRootIsSafe()
         {
             using var scratch = new Scratch();
             CatalogTests.FakeMachine(scratch);
 
-            var roots = TargetCatalog.Build(scratch.Folders).SelectMany(t => t.Roots).ToList();
+            var roots = TargetCatalog.Build(scratch.Folders).Where(t => t.Kind == TargetKind.Files).SelectMany(t => t.Roots).ToList();
 
             Assert.NotEmpty(roots);
             Assert.All(roots, r => Assert.True(PathGuard.IsSafeRoot(r, scratch.Folders), r.Path));

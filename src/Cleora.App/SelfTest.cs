@@ -30,7 +30,8 @@ namespace Cleora.App
             Section("large files and duplicates", () => LargeAndDuplicates(Path.Combine(directory, "files")));
             Section("installed apps", InstalledAppsCheck);
             Section("startup switch", StartupCheck);
-            Section("recycle bin", () => RecycleCheck(Path.Combine(directory, "recycle")));
+            // On the system drive: a CI work disk may have no Recycle Bin, and then "recycle" means delete.
+            Section("recycle bin", () => RecycleCheck(Path.Combine(Path.GetTempPath(), "cleora-recycle-check")));
             Console.WriteLine(_failures == 0 ? "selftest OK" : $"selftest FAILED: {_failures} check(s)");
             return _failures == 0 ? 0 : 1;
         }
@@ -129,7 +130,14 @@ namespace Cleora.App
             }
 
             Expect(service.Targets.Any(t => t.Id == "temp") && service.Targets.Any(t => t.Id == "update-cache"), "catalog has the Windows targets");
-            Expect(service.Targets.SelectMany(t => t.Roots).All(r => PathGuard.IsSafeRoot(r, folders)), "every root on this machine passes PathGuard");
+            // Windows.old is removed as a whole by its own path check, never file by file through PathGuard.
+            var unsafeRoots = service.Targets.Where(t => t.Kind == TargetKind.Files).SelectMany(t => t.Roots).Where(r => !PathGuard.IsSafeRoot(r, folders)).ToList();
+            foreach (var root in unsafeRoots)
+            {
+                Console.WriteLine("  unsafe root: " + root.Path);
+            }
+
+            Expect(unsafeRoots.Count == 0, "every file root on this machine passes PathGuard");
             Console.WriteLine("  total cleanable: " + Sizes.Format(total));
         }
 

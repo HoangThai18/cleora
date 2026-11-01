@@ -16,6 +16,7 @@ using Cleora.Core.Cleanup;
 using Cleora.Core.Scanning;
 using Cleora.Core.Settings;
 using Cleora.Core.Startup;
+using Cleora.Core.Updates;
 
 namespace Cleora.App
 {
@@ -42,6 +43,8 @@ namespace Cleora.App
         private bool _appsLoaded;
         private bool _startupLoaded;
         private bool _disposed;
+        private bool _updating;
+        private AvailableUpdate? _update;
 
         public MainController(MainForm form, AppSettings settings, string settingsPath)
         {
@@ -103,6 +106,7 @@ namespace Cleora.App
                 ApplyTheme();
             };
             _settingsPage.CheckUpdate.Click += (_, _) => CheckUpdate();
+            _settingsPage.UpdateNow.Click += (_, _) => UpdateNow();
 
             form.PageShown += (_, page) =>
             {
@@ -129,6 +133,8 @@ namespace Cleora.App
             _form.Status.SetState(_elevated ? "Sẵn sàng · quyền quản trị" : "Sẵn sàng", Theme.Ok);
             _form.Status.Details = "Bấm Quét để xem có thể dọn bao nhiêu";
             _form.Show();
+            Updater.CleanUp();
+            CheckForUpdateLater();
         }
 
         public void Dispose()
@@ -454,9 +460,74 @@ namespace Cleora.App
         {
             _settingsPage.ShowUpdate("Đang kiểm tra…");
             var result = await UpdateService.CheckAsync();
-            _settingsPage.ShowUpdate(result.Failed ? "Không kiểm tra được, xem mạng rồi thử lại."
-                : result.Update == null ? "Bạn đang dùng bản mới nhất."
-                : "Có bản " + result.Update.Version + ": tải ở trang thaipro.store/phan-mem/cleora.");
+            if (result.Update != null)
+            {
+                _update = result.Update;
+                _settingsPage.OfferUpdate(result.Update.Version);
+            }
+            else
+            {
+                _settingsPage.ShowUpdate(result.Failed ? "Không kiểm tra được, xem mạng rồi thử lại." : "Bạn đang dùng bản mới nhất.");
+            }
+        }
+
+        /// <summary>One quiet check a few seconds after start; a newer release puts a dot on Cài đặt and its button there.</summary>
+        private async void CheckForUpdateLater()
+        {
+            await Task.Delay(TimeSpan.FromSeconds(20));
+            var update = (await UpdateService.CheckAsync()).Update;
+            if (update != null && !_disposed)
+            {
+                _update = update;
+                _settingsPage.OfferUpdate(update.Version);
+                _form.Status.Details = $"Có Cleora bản {update.Version.ToString(3)}: vào Cài đặt bấm Cập nhật";
+            }
+        }
+
+        /// <summary>Downloads the new installer, checks its SHA-256, runs it silently and closes so it can replace Cleora.</summary>
+        private async void UpdateNow()
+        {
+            var update = _update;
+            if (update == null || _updating)
+            {
+                return;
+            }
+
+            if (!Updater.CanUpdateInPlace || !update.CanInstall)
+            {
+                Process.Start(new ProcessStartInfo(SettingsPage.Homepage) { UseShellExecute = true });
+                return;
+            }
+
+            if (_busy)
+            {
+                MessageBox.Show(_form, "Cleora đang quét hoặc dọn. Đợi xong rồi bấm Cập nhật.", "Cleora", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            _updating = true;
+            _settingsPage.UpdateNow.Enabled = false;
+            try
+            {
+                var page = _settingsPage;
+                var installer = await Task.Run(() => Updater.Download(update, (done, total) =>
+                {
+                    if (total > 0)
+                    {
+                        page.BeginInvoke(new Action(() => page.ShowUpdate($"Đang tải bản {update.Version.ToString(3)}: {done * 100 / total}%")));
+                    }
+                }, CancellationToken.None));
+                _settingsPage.ShowUpdate("Đang cài bản mới, Cleora sẽ tự mở lại…");
+                Updater.Install(installer);
+                _form.Close();
+            }
+            catch (Exception error) when (error is CleoraException || error is System.Net.WebException || error is IOException || error is UnauthorizedAccessException || error is System.ComponentModel.Win32Exception)
+            {
+                Log.Error("update failed", error);
+                _settingsPage.ShowUpdate("Không cập nhật được, xem mạng rồi bấm lại.");
+                _settingsPage.UpdateNow.Enabled = true;
+                _updating = false;
+            }
         }
 
         private void RestartElevated()

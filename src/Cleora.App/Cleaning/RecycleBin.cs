@@ -16,7 +16,13 @@ namespace Cleora.App.Cleaning
         {
             var info = new ShQueryRbInfo { Size = Marshal.SizeOf(typeof(ShQueryRbInfo)) };
             var result = SHQueryRecycleBin(null, ref info);
-            return result == 0 ? (info.Bytes, info.Items) : (0, 0);
+            if (result != 0)
+            {
+                Log.Warn($"SHQueryRecycleBin failed: 0x{result:x8}");
+                return (0, 0);
+            }
+
+            return (info.Bytes, info.Items);
         }
 
         public static bool Empty()
@@ -48,7 +54,8 @@ namespace Cleora.App.Cleaning
                 Microsoft.VisualBasic.FileIO.UICancelOption.ThrowException);
         }
 
-        [StructLayout(LayoutKind.Sequential, Pack = 4)]
+        // 64-bit Windows packs this struct on 8 bytes (24 bytes in all); a smaller cbSize makes the call fail.
+        [StructLayout(LayoutKind.Sequential)]
         private struct ShQueryRbInfo
         {
             public int Size;

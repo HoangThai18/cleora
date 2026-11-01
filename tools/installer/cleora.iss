@@ -50,6 +50,15 @@ Name: "{userdesktop}\Cleora"; Filename: "{app}\Cleora.exe"; Tasks: desktopicon
 ; shellexec: Cleora asks for administrator rights when the user has them, and only ShellExecute can show that prompt.
 Filename: "{app}\Cleora.exe"; Description: "Mở Cleora"; Flags: nowait postinstall skipifsilent shellexec
 
+; "Cập nhật ngay" runs this installer silently with /RELAUNCH=1: start the new Cleora once it is in place.
+Filename: "{app}\Cleora.exe"; Flags: nowait shellexec; Check: IsRelaunch
+
+[Code]
+function IsRelaunch: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
+
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM Cleora.exe /F"; Flags: runhidden; RunOnceId: "StopCleora"
 

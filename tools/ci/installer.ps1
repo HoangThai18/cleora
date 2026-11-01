@@ -29,6 +29,16 @@ $installed = Join-Path $env:LOCALAPPDATA 'Programs\Cleora\Cleora.exe'
 if (-not (Test-Path $installed)) { throw "installer did not put Cleora.exe in place" }
 $roundtrip = Start-Process -FilePath $installed -ArgumentList '--ui-screenshot', "`"$(Join-Path $out 'installed-check.png')`"", '--page', 'Settings' -NoNewWindow -Wait -PassThru
 if ($roundtrip.ExitCode -ne 0) { throw "installed Cleora.exe failed to run ($($roundtrip.ExitCode))" }
+# "Cập nhật ngay" path: the same installer run silently over the installed app with /RELAUNCH=1 must start it again.
+Get-Process Cleora -ErrorAction SilentlyContinue | Stop-Process -Force
+$update = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/RELAUNCH=1' -Wait -PassThru
+if ($update.ExitCode -ne 0) { throw "update install exited with $($update.ExitCode)" }
+$relaunched = $null
+for ($i = 0; $i -lt 20 -and -not $relaunched; $i++) { Start-Sleep -Milliseconds 500; $relaunched = Get-Process Cleora -ErrorAction SilentlyContinue }
+if (-not $relaunched) { throw "the update install did not start Cleora again" }
+Write-Host "update install relaunched Cleora (pid $($relaunched[0].Id))"
+$relaunched | Stop-Process -Force
+Start-Sleep -Seconds 1
 $uninstaller = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\Cleora') -Filter 'unins*.exe' | Select-Object -First 1
 $remove = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
 Start-Sleep -Seconds 3
