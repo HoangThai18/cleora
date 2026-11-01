@@ -25,9 +25,10 @@ namespace Cleora.Core.Tests
 
         public KnownFolders Folders { get; }
 
+        /// <summary>Paths come back in the platform's own form ("/" becomes "\" on Windows), as the scanner reports them.</summary>
         public string File(string path, int bytes = 10, DateTime? written = null)
         {
-            var full = Path.Combine(Root, path);
+            var full = Path.GetFullPath(Path.Combine(Root, path));
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
             System.IO.File.WriteAllBytes(full, new byte[bytes]);
             System.IO.File.SetLastWriteTimeUtc(full, written ?? DateTime.UtcNow.AddDays(-30));
@@ -36,7 +37,7 @@ namespace Cleora.Core.Tests
 
         public string Dir(string path)
         {
-            var full = Path.Combine(Root, path);
+            var full = Path.GetFullPath(Path.Combine(Root, path));
             Directory.CreateDirectory(full);
             return full;
         }
