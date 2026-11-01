@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['cleora-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: App Windows (build, test, selftest, đóng gói)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build Cleora.slnx -c Release
+
+      - name: Unit tests
+        run: dotnet test tests/Cleora.Core.Tests -c Release --no-build
+
+      - name: Self-test (dọn máy giả, quét máy thật không xoá, app, khởi động, Thùng rác)
+        shell: pwsh
+        run: tools/ci/selftest.ps1
+
+      - name: Chụp giao diện
+        shell: pwsh
+        run: tools/ci/ui-screenshots.ps1
+
+      - name: Đóng gói zip portable
+        id: package
+        shell: pwsh
+        run: tools/ci/package.ps1
+
+      - name: Upload selftest and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-and-screenshots
+          path: |
+            artifacts/selftest/*.txt
+            artifacts/screenshots
+          retention-days: 14
+
+      - name: Bộ cài (cài, chạy, gỡ im lặng)
+        id: installer
+        shell: pwsh
+        run: tools/ci/installer.ps1
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleora-setup
+          path: ${{ steps.installer.outputs.setup }}
+          retention-days: 30
+
+      - name: Upload portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleora-portable
+          path: ${{ steps.package.outputs.zip }}
+          retention-days: 30
+
+  release:
+    name: Phát hành lên GitHub Releases
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'cleora-')
+    needs: [app]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Kiểm phiên bản, gom file, tạo Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#cleora-}"
+          props=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
+          [ "$version" = "$props" ] || { echo "tag $TAG does not match Directory.Build.props $props"; exit 1; }
+          notes="docs/release-notes/$version.md"
+          [ -f "$notes" ] || { echo "missing $notes"; exit 1; }
+
+          mkdir -p upload
+          cp dist/cleora-portable/cleora-$version-windows-x64-portable.zip upload/
+          cp dist/cleora-setup/cleora-$version-windows-x64-setup.exe upload/
+          (cd upload && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+          {
+            cat "$notes"
+            echo
+            echo "---"
+            echo
+            echo "Cleora miễn phí, mã nguồn mở theo giấy phép MIT. Bản cài chưa ký số nên Windows SmartScreen có thể cảnh báo lần đầu: bấm \"More info\" rồi \"Run anyway\". Đối chiếu SHA-256 trong SHA256SUMS.txt để chắc file nguyên vẹn."
+          } > body.md
+
+          gh release create "$TAG" upload/* --title "Cleora $version" --notes-file body.md

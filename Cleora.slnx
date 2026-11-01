@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Cleora.App/Cleora.App.csproj" />
+    <Project Path="src/Cleora.Core/Cleora.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cleora.Core.Tests/Cleora.Core.Tests.csproj" />
+  </Folder>
+</Solution>
