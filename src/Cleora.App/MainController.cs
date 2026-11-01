@@ -38,7 +38,7 @@ namespace Cleora.App
         private readonly AppsPage _appsPage;
         private readonly StartupPage _startupPage;
         private readonly SettingsPage _settingsPage;
-        private string _duplicateFolder;
+        private string[] _duplicateFolders;
         private bool _busy;
         private bool _appsLoaded;
         private bool _startupLoaded;
@@ -54,12 +54,12 @@ namespace Cleora.App
             _folders = WindowsFolders.Current();
             _elevated = Elevation.IsElevated;
             _clean = new CleanService(_folders, _elevated);
-            _duplicateFolder = _folders.UserProfile;
+            _duplicateFolders = WindowsFolders.DuplicateDefaults();
             Log.Info($"elevated: {_elevated}; {_clean.Targets.Count} targets");
 
             _cleanPage = new CleanPage(_clean.Targets, settings.IsChosen, _elevated);
             _largePage = new LargeFilesPage(FixedDrives());
-            _duplicatesPage = new DuplicatesPage(_duplicateFolder, settings.DuplicateMinMb, settings.KeepRule);
+            _duplicatesPage = new DuplicatesPage(DescribeFolders(_duplicateFolders), settings.DuplicateMinMb, settings.KeepRule);
             _appsPage = new AppsPage();
             _startupPage = new StartupPage(_elevated);
             _settingsPage = new SettingsPage(Program.Version, settings.Theme, settings.FreedTotal);
@@ -289,7 +289,9 @@ namespace Cleora.App
             var progress = new Progress<int>(seen => _largePage.ShowStatus($"Đã xem {seen:N0} tệp…"));
             try
             {
-                var scan = await Task.Run(() => LargeFileFinder.Find(root, LargeFilesShown, 1 << 20, progress));
+                var system = _folders.SystemAreas;
+                var scan = await Task.Run(() => LargeFileFinder.Find(root, LargeFilesShown, 1 << 20, progress,
+                    listable: path => !system.Any(area => PathGuard.IsInside(path, area))));
                 _largePage.ShowResult(scan);
                 _largePage.ShowStatus($"{scan.FilesSeen:N0} tệp, {Sizes.Format(scan.TotalBytes)}" + (scan.SkippedFolders > 0 ? $" · {scan.SkippedFolders} thư mục không đọc được" : string.Empty));
             }
@@ -327,12 +329,12 @@ namespace Cleora.App
 
         private void ChooseDuplicateFolder()
         {
-            using (var dialog = new FolderBrowserDialog { SelectedPath = _duplicateFolder, Description = "Chọn thư mục để tìm file trùng" })
+            using (var dialog = new FolderBrowserDialog { SelectedPath = _duplicateFolders.FirstOrDefault() ?? _folders.UserProfile, Description = "Chọn thư mục để tìm file trùng" })
             {
                 if (dialog.ShowDialog(_form) == DialogResult.OK)
                 {
-                    _duplicateFolder = dialog.SelectedPath;
-                    _duplicatesPage.ShowFolder(_duplicateFolder);
+                    _duplicateFolders = new[] { dialog.SelectedPath };
+                    _duplicatesPage.ShowFolder(DescribeFolders(_duplicateFolders));
                 }
             }
         }
@@ -344,7 +346,7 @@ namespace Cleora.App
                 return;
             }
 
-            var folder = _duplicateFolder;
+            var folders = _duplicateFolders;
             var minBytes = (long)_settings.DuplicateMinMb << 20;
             var rule = _settings.KeepRule;
             SetBusy(true, "Đang tìm file trùng…");
@@ -354,7 +356,12 @@ namespace Cleora.App
             {
                 var groups = await Task.Run(() =>
                 {
-                    var files = new FileWalker().Walk(folder, Array.Empty<string>(), recursive: true).ToList();
+                    var walker = new FileWalker();
+                    var files = folders
+                        .SelectMany(f => walker.Walk(f, Array.Empty<string>(), recursive: true, skipFolder: SkipForDuplicates))
+                        .GroupBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .ToList();
                     return DuplicateFinder.Find(files, Math.Max(1, minBytes), progress: progress);
                 });
                 _duplicatesPage.ShowGroups(groups, rule);
@@ -373,7 +380,7 @@ namespace Cleora.App
             var ticked = _duplicatesPage.List.CheckedItems.Cast<ListViewItem>().Select(i => ((DuplicateGroup Group, FoundFile File))i.Tag).ToList();
             var deletable = ticked
                 .GroupBy(t => t.Group)
-                .SelectMany(g => DuplicateFinder.Deletable(g.Key, new HashSet<string>(g.Select(t => t.File.Path), StringComparer.OrdinalIgnoreCase), _settings.KeepRule))
+                .SelectMany(g => DuplicateFinder.Deletable(g.Key, new HashSet<string>(g.Select(t => t.File.Path), StringComparer.OrdinalIgnoreCase), _settings.KeepRule, Unchanged))
                 .ToList();
             if (deletable.Count == 0)
             {
@@ -395,13 +402,48 @@ namespace Cleora.App
             _duplicatesPage.ShowStatus($"Đã chuyển {gone.Count} bản thừa vào Thùng rác");
         }
 
-        private bool Recycle(string path)
+        /// <summary>Still on disk exactly as scanned; a copy changed or moved since is neither deleted nor counted as kept.</summary>
+        private static bool Unchanged(FoundFile file)
         {
             try
             {
-                RecycleBin.Send(path);
-                Log.Info("recycled " + path);
+                var info = new FileInfo(file.Path);
+                return info.Exists && info.Length == file.Length && info.LastWriteTimeUtc == file.LastWriteUtc;
+            }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        private static bool SkipForDuplicates(DirectoryInfo folder)
+        {
+            try
+            {
+                return DuplicateFinder.SkipFolder(folder.Name, (folder.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0);
+            }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+            {
                 return true;
+            }
+        }
+
+        private static string DescribeFolders(string[] folders) =>
+            folders.Length == 1 ? folders[0] : string.Join(", ", folders.Select(Path.GetFileName)) + " (bỏ qua thư mục ẩn và dữ liệu app)";
+
+        private bool Recycle(string path)
+        {
+            if (!RecycleBin.OnFixedDrive(path))
+            {
+                MessageBox.Show(_form, "File nằm trên ổ rời hoặc ổ mạng, không có Thùng rác nên Cleora không xoá. Hãy tự xoá nếu chắc chắn.", "Cleora", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return false;
+            }
+
+            try
+            {
+                var recycled = RecycleBin.Send(path);
+                Log.Info((recycled ? "recycled " : "not recycled ") + path);
+                return recycled;
             }
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is OperationCanceledException)
             {

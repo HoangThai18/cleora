@@ -39,20 +39,68 @@ namespace Cleora.App.Cleaning
             return true;
         }
 
-        /// <summary>Moves a file to the Recycle Bin, so the user can still get it back.</summary>
-        public static void Send(string path)
+        /// <summary>
+        /// Moves a file to the Recycle Bin. Only files on fixed drives (USB sticks and network shares have no bin),
+        /// and Windows is told to warn before destroying a file it can't recycle (bigger than the bin, bin turned off)
+        /// instead of deleting it silently. True when the file is in the bin.
+        /// </summary>
+        public static bool Send(string path)
         {
-            if (!File.Exists(path))
+            if (!File.Exists(path) || !OnFixedDrive(path))
             {
-                return;
+                return false;
             }
 
-            Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(
-                path,
-                Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
-                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin,
-                Microsoft.VisualBasic.FileIO.UICancelOption.ThrowException);
+            var operation = new ShFileOpStruct
+            {
+                Func = FoDelete,
+                From = System.IO.Path.GetFullPath(path) + "\0\0",
+                Flags = FofAllowUndo | FofNoConfirmation | FofWantNukeWarning | FofSilent,
+            };
+            var result = SHFileOperation(ref operation);
+            var recycled = result == 0 && !operation.AnyOperationsAborted && !File.Exists(path);
+            if (!recycled)
+            {
+                Log.Warn($"recycle {path}: result 0x{result:x}, aborted {operation.AnyOperationsAborted}");
+            }
+
+            return recycled;
         }
+
+        public static bool OnFixedDrive(string path)
+        {
+            try
+            {
+                var root = System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(path));
+                return !string.IsNullOrEmpty(root) && !root!.StartsWith("\\\\", StringComparison.Ordinal) && new DriveInfo(root).DriveType == DriveType.Fixed;
+            }
+            catch (Exception error) when (error is ArgumentException || error is IOException)
+            {
+                return false;
+            }
+        }
+
+        private const int FoDelete = 3;
+        private const ushort FofSilent = 0x4;
+        private const ushort FofNoConfirmation = 0x10;
+        private const ushort FofAllowUndo = 0x40;
+        private const ushort FofWantNukeWarning = 0x4000;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct ShFileOpStruct
+        {
+            public IntPtr Window;
+            public int Func;
+            [MarshalAs(UnmanagedType.LPWStr)] public string From;
+            [MarshalAs(UnmanagedType.LPWStr)] public string? To;
+            public ushort Flags;
+            [MarshalAs(UnmanagedType.Bool)] public bool AnyOperationsAborted;
+            public IntPtr NameMappings;
+            [MarshalAs(UnmanagedType.LPWStr)] public string? ProgressTitle;
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern int SHFileOperation(ref ShFileOpStruct operation);
 
         // 64-bit Windows packs this struct on 8 bytes (24 bytes in all); a smaller cbSize makes the call fail.
         [StructLayout(LayoutKind.Sequential)]

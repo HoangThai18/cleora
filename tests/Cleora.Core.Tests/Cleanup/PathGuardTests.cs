@@ -37,6 +37,26 @@ namespace Cleora.Core.Tests.Cleanup
         }
 
         [Fact]
+        public void IsSafeRoot_UserFoldersOrARootHoldingThem_False()
+        {
+            using var scratch = new Scratch();
+            var f = scratch.Folders;
+
+            Assert.False(PathGuard.IsSafeRoot(CleanupRoot.All(Path.Combine(f.UserProfile, "Documents")), f));
+            Assert.False(PathGuard.IsSafeRoot(CleanupRoot.All(Path.Combine(f.UserProfile, "Downloads")), f));
+            Assert.False(PathGuard.IsSafeRoot(CleanupRoot.All(Path.Combine(f.SystemDrive, "Users")), f));
+        }
+
+        [Fact]
+        public void Catalog_TempThatIsNotATempFolder_IsNotCleaned()
+        {
+            using var scratch = new Scratch();
+            var odd = scratch.Folders with { Temp = Path.Combine(scratch.Folders.UserProfile, "Work") };
+
+            Assert.DoesNotContain(TargetCatalog.Build(odd), t => t.Id == "temp");
+        }
+
+        [Fact]
         public void IsSafeRoot_CacheFolderOrNamedFilesInWindows_True()
         {
             using var scratch = new Scratch();

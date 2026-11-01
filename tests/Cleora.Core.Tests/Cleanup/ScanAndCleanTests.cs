@@ -137,6 +137,24 @@ namespace Cleora.Core.Tests.Cleanup
         }
 
         [Fact]
+        public void Clean_FolderSwappedForALinkAfterTheScan_DeletesNothingBehindIt()
+        {
+            using var s = new Scratch();
+            var temp = s.Dir("C/Windows/Temp");
+            s.File("C/Windows/Temp/x/foo.dll", 100);
+            var system = s.File("C/Windows/System32/foo.dll", 100);
+            var scan = CleanupScanner.Scan(Target(TimeSpan.Zero, CleanupRoot.All(temp, admin: true)), s.Folders, DateTime.UtcNow, elevated: true);
+
+            // The attacker's move between scan and clean: x becomes a link to System32.
+            Directory.Delete(Path.Combine(temp, "x"), recursive: true);
+            Directory.CreateSymbolicLink(Path.Combine(temp, "x"), Path.GetDirectoryName(system)!);
+            var result = new Cleaner().Clean(scan, s.Folders);
+
+            Assert.Equal(CleanResult.None, result);
+            Assert.True(File.Exists(system));
+        }
+
+        [Fact]
         public void Clean_UnsafeRoot_DeletesNothing()
         {
             using var s = new Scratch();

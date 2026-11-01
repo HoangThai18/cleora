@@ -3,7 +3,7 @@ id: P0-T01
 title: "Lõi dọn: danh mục, PathGuard, quét, dọn, file lớn, file trùng, app, khởi động"
 phase: P0
 lane: Core
-status: doing
+status: done
 deps: []
 touches: [src/Cleora.Core/**, tests/Cleora.Core.Tests/**]
 size: L

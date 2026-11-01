@@ -45,7 +45,7 @@ namespace Cleora.App.UI
 
                 var clean = new CleanPage(targets, (_, on) => on, elevated: false);
                 var large = new LargeFilesPage(new[] { (@"C:\", "C: còn 41,8 GB"), (@"D:\", "D: còn 212,4 GB") });
-                var duplicates = new DuplicatesPage(@"C:\Users\ban", 1, KeepRule.Newest);
+                var duplicates = new DuplicatesPage("Documents, Pictures, Videos, Music, Desktop, Downloads (bỏ qua thư mục ẩn và dữ liệu app)", 1, KeepRule.Newest);
                 var apps = new AppsPage();
                 var startup = new StartupPage(elevated: false);
                 var settings = new SettingsPage(Program.Version, ThemeMode.System, 18_600_000_000);

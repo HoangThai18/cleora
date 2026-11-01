@@ -15,7 +15,7 @@ namespace Cleora.Core.Scanning
     {
         public int SkippedFolders { get; private set; }
 
-        public IEnumerable<FoundFile> Walk(string root, IReadOnlyList<string> patterns, bool recursive, CancellationToken cancel = default)
+        public IEnumerable<FoundFile> Walk(string root, IReadOnlyList<string> patterns, bool recursive, CancellationToken cancel = default, Func<DirectoryInfo, bool>? skipFolder = null)
         {
             var matchers = patterns.Select(Wildcard).ToArray();
             var pending = new Stack<DirectoryInfo>();
@@ -53,7 +53,7 @@ namespace Cleora.Core.Scanning
                 {
                     if (entry is DirectoryInfo sub)
                     {
-                        if (recursive && !IsLink(sub))
+                        if (recursive && !IsLink(sub) && (skipFolder == null || !skipFolder(sub)))
                         {
                             pending.Push(sub);
                         }

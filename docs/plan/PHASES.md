@@ -2,7 +2,7 @@
 
 | Phase | Mục tiêu | Trạng thái |
 |---|---|---|
-| P0 | Nền móng + bản 0.1.0: dọn rác, file lớn, file trùng, gỡ app, khởi động, CI, bộ cài, trang tải | doing |
+| P0 | Nền móng + bản 0.1.0: dọn rác, file lớn, file trùng, gỡ app, khởi động, CI, bộ cài, trang tải | done |
 
 ## P0: Bản đầu đủ năm luồng
 **Tiêu chí ra:**

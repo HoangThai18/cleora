@@ -89,6 +89,7 @@ namespace Cleora.Core.Tests.Cleanup
             Assert.Equal(targets.Count, targets.Select(t => t.Id).Distinct().Count());
             Assert.False(targets.Single(t => t.Id == "windows-old").DefaultOn);
             Assert.False(targets.Single(t => t.Id == "shader-cache").DefaultOn);
+            Assert.False(targets.Single(t => t.Id == "recycle-bin").DefaultOn);
             Assert.True(targets.Single(t => t.Id == "windows-old").RequiresAdmin);
         }
     }

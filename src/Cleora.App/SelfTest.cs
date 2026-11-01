@@ -206,7 +206,7 @@ namespace Cleora.App
             var file = Path.Combine(root, "to-recycle.bin");
             File.WriteAllBytes(file, new byte[123_456]);
             var before = RecycleBin.Query();
-            RecycleBin.Send(file);
+            Expect(RecycleBin.Send(file), "Send reports the file recycled");
             var after = RecycleBin.Query();
             Console.WriteLine($"  bin before {before.Bytes} B / {before.Items}, after {after.Bytes} B / {after.Items}");
             Expect(!File.Exists(file), "file left its folder");

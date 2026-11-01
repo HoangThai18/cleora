@@ -47,7 +47,9 @@ namespace Cleora.Core.Cleanup
                 return Depth(full) >= 1;
             }
 
-            return !isProtected && Depth(full) >= 2;
+            // A root that holds a protected folder (Documents inside a mis-set TEMP) would empty it too.
+            var holdsProtected = folders.Protected.Any(p => IsInside(p, full));
+            return !isProtected && !holdsProtected && Depth(full) >= 2;
         }
 
         private static int Depth(string full)

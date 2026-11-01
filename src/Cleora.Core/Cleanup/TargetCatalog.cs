@@ -34,9 +34,14 @@ namespace Cleora.Core.Cleanup
             string Win(params string[] parts) => Path.Combine(new[] { f.Windows }.Concat(parts).ToArray());
             string Local(params string[] parts) => Path.Combine(new[] { f.LocalAppData }.Concat(parts).ToArray());
 
+            // TEMP comes from the environment: only a folder that really is a temp folder is emptied.
+            var tempName = Path.GetFileName(f.Temp.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            var tempRoots = string.Equals(tempName, "Temp", StringComparison.OrdinalIgnoreCase) || string.Equals(tempName, "Tmp", StringComparison.OrdinalIgnoreCase)
+                ? new[] { CleanupRoot.All(f.Temp) }
+                : new CleanupRoot[0];
             yield return Target("temp", TargetGroup.System, "File tạm của bạn",
                 "Các app và bộ cài để lại trong thư mục Temp. Chỉ xoá file đã cũ hơn một ngày.",
-                Day, true, null, CleanupRoot.All(f.Temp));
+                Day, true, null, tempRoots);
             yield return Target("windows-temp", TargetGroup.System, "File tạm của Windows",
                 "Thư mục Windows\\Temp. Chỉ xoá file đã cũ hơn một ngày.",
                 Day, true, null, CleanupRoot.All(Win("Temp"), admin: true));
@@ -82,7 +87,7 @@ namespace Cleora.Core.Cleanup
                 CleanupRoot.All(Local("Intel", "ShaderCache")));
             yield return new CleanupTarget("recycle-bin", TargetGroup.System, "Thùng rác",
                 "Mọi file trong Thùng rác của các ổ. Xoá rồi là không lấy lại được.",
-                Array.Empty<CleanupRoot>(), TimeSpan.Zero, true, TargetKind.RecycleBin);
+                Array.Empty<CleanupRoot>(), TimeSpan.Zero, false, TargetKind.RecycleBin);
             yield return new CleanupTarget("windows-old", TargetGroup.System, "Bản Windows cũ (Windows.old)",
                 "Windows giữ lại sau khi nâng cấp để quay về bản cũ. Xoá rồi thì không quay về được nữa.",
                 new[] { CleanupRoot.All(Path.Combine(f.SystemDrive, "Windows.old"), admin: true) }, TimeSpan.Zero, false, TargetKind.WindowsOld);
@@ -158,12 +163,6 @@ namespace Cleora.Core.Cleanup
             yield return Target("steam", TargetGroup.App, "Bộ nhớ đệm Steam",
                 "Trang cửa hàng, ảnh và gói tải dở. Game đã cài giữ nguyên.",
                 TimeSpan.Zero, true, new[] { "steam", "steamwebhelper" }, steam);
-
-            var spotify = new[] { Path.Combine(f.LocalAppData, "Spotify", "Storage"), Path.Combine(f.LocalAppData, "Spotify", "Data") }
-                .Where(Directory.Exists).Select(p => CleanupRoot.All(p)).ToArray();
-            yield return Target("spotify", TargetGroup.App, "Bộ nhớ đệm Spotify",
-                "Nhạc đã nghe được lưu tạm. Bài tải về để nghe offline không bị xoá.",
-                TimeSpan.Zero, true, new[] { "Spotify" }, spotify);
         }
 
         /// <summary>

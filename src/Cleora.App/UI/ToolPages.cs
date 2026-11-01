@@ -18,7 +18,7 @@ namespace Cleora.App.UI
         private readonly Label _status;
 
         public LargeFilesPage(IReadOnlyList<(string Root, string Label)> drives)
-            : base("File lớn", "Tìm thư mục và file chiếm nhiều chỗ nhất. File xoá ở đây vào Thùng rác, lấy lại được.")
+            : base("File lớn", "Tìm thư mục và file chiếm nhiều chỗ nhất. File xoá ở đây vào Thùng rác, lấy lại được. File của Windows và app không được liệt kê.")
         {
             var pick = AddCard("Ổ đĩa");
             Drives = new Segmented<string>(drives.Select(d => (d.Root, d.Label)), drives.FirstOrDefault().Root ?? @"C:\") { Width = Math.Max(160, drives.Count * 150) };

@@ -41,6 +41,12 @@ namespace Cleora.Core.Cleanup
                     continue;
                 }
 
+                // A folder swapped for a junction after the scan would send the delete elsewhere (System32 when elevated).
+                if (!PlainPathFromRoot(file.Path, root.Path))
+                {
+                    continue;
+                }
+
                 try
                 {
                     _delete(file.Path);
@@ -59,6 +65,36 @@ namespace Cleora.Core.Cleanup
             }
 
             return new CleanResult(freed, deleted, inUse);
+        }
+
+        /// <summary>True when no folder from <paramref name="root"/> down to the file is a junction or symbolic link.</summary>
+        internal static bool PlainPathFromRoot(string file, string root)
+        {
+            try
+            {
+                var stop = PathGuard.Normalize(root);
+                var folder = new DirectoryInfo(Path.GetDirectoryName(PathGuard.Normalize(file))!);
+                while (folder != null && folder.FullName.Length >= stop.Length)
+                {
+                    if (!folder.Exists || FileWalker.IsLink(folder))
+                    {
+                        return false;
+                    }
+
+                    if (string.Equals(PathGuard.Normalize(folder.FullName), stop, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    folder = folder.Parent;
+                }
+
+                return false;
+            }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is ArgumentException || error is System.Security.SecurityException)
+            {
+                return false;
+            }
         }
 
         private static void DeleteFile(string path)

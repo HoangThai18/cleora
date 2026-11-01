@@ -76,17 +76,35 @@ namespace Cleora.Core.Scanning
         /// The ticked copies of a group that may really go: never every copy. If all are ticked, the one
         /// <paramref name="rule"/> keeps stays.
         /// </summary>
-        public static IReadOnlyList<FoundFile> Deletable(DuplicateGroup group, ICollection<string> ticked, KeepRule rule)
+        /// <param name="unchanged">True when a copy is still on disk as scanned (same size and time); others are skipped.</param>
+        public static IReadOnlyList<FoundFile> Deletable(DuplicateGroup group, ICollection<string> ticked, KeepRule rule, Func<FoundFile, bool>? unchanged = null)
         {
-            var chosen = group.Files.Where(f => ticked.Contains(f.Path)).ToList();
-            if (chosen.Count == group.Files.Count)
+            unchanged ??= _ => true;
+            var present = group.Files.Where(unchanged).ToList();
+            var chosen = present.Where(f => ticked.Contains(f.Path)).ToList();
+
+            // At least one unticked copy must still be on disk; copies already gone don't count.
+            if (chosen.Count == present.Count && present.Count > 0)
             {
-                var keep = Keep(group, rule);
+                var keep = Keep(group with { Files = present }, rule);
                 chosen.Remove(keep);
             }
 
             return chosen;
         }
+
+        /// <summary>
+        /// Folders the duplicate search never enters: hidden or system folders, app data and developer folders,
+        /// where identical files are meant to be identical (DLLs of two app versions, packages, environments).
+        /// </summary>
+        public static bool SkipFolder(string name, bool hiddenOrSystem) =>
+            hiddenOrSystem || name.StartsWith(".", StringComparison.Ordinal) || SkippedNames.Contains(name);
+
+        private static readonly HashSet<string> SkippedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "AppData", "node_modules", "venv", ".venv", "env", "site-packages", "__pycache__", "packages", "bin", "obj",
+            "Windows", "Program Files", "Program Files (x86)", "ProgramData", "$Recycle.Bin", "System Volume Information",
+        };
 
         private static IEnumerable<(string Key, List<FoundFile> Files)> GroupBy(IEnumerable<FoundFile> files, Func<FoundFile, string?> key, CancellationToken cancel)
         {

@@ -103,6 +103,45 @@ namespace Cleora.Core.Tests.Scanning
             Assert.Equal(new[] { @"D:.jpg" }, one.Select(f => f.Path));
         }
 
+        [Fact]
+        public void Deletable_OtherCopiesAlreadyGone_KeepsTheLastOne()
+        {
+            var group = new DuplicateGroup(10, "h", new[]
+            {
+                new FoundFile(@"D:\a.jpg", 10, new DateTime(2020, 1, 1)),
+                new FoundFile(@"D:\b.jpg", 10, new DateTime(2021, 1, 1)),
+                new FoundFile(@"D:\c.jpg", 10, new DateTime(2025, 1, 1)),
+            });
+
+            var left = DuplicateFinder.Deletable(group, new HashSet<string> { @"D:\c.jpg" }, KeepRule.Newest, f => f.Path == @"D:\c.jpg");
+
+            Assert.Empty(left);
+        }
+
+        [Theory]
+        [InlineData("AppData", false, true)]
+        [InlineData("node_modules", false, true)]
+        [InlineData(".git", false, true)]
+        [InlineData("Ảnh Đà Lạt", true, true)]
+        [InlineData("Ảnh Đà Lạt", false, false)]
+        public void SkipFolder_AppAndHiddenFolders(string name, bool hidden, bool skipped)
+        {
+            Assert.Equal(skipped, DuplicateFinder.SkipFolder(name, hidden));
+        }
+
+        [Fact]
+        public void LargeFiles_NotListable_StillCountedButNotOffered()
+        {
+            using var s = new Scratch();
+            s.File("C/Windows/Installer/big.msi", 9000);
+            s.File("C/Users/ban/movie.mkv", 5000);
+
+            var scan = LargeFileFinder.Find(Path.Combine(s.Root, "C"), 10, 0, listable: p => !p.Contains("Windows"));
+
+            Assert.Equal(new[] { "movie.mkv" }, scan.Files.Select(f => Path.GetFileName(f.Path)));
+            Assert.Equal(14000, scan.TotalBytes);
+        }
+
         [Theory]
         [InlineData(KeepRule.Newest, @"D:\new\photo.jpg")]
         [InlineData(KeepRule.Oldest, @"D:\old\a\deep\photo.jpg")]

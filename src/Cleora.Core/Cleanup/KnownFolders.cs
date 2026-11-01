@@ -19,6 +19,13 @@ namespace Cleora.Core.Cleanup
         {
             SystemDrive, Windows, ProgramData, ProgramFilesX86, UserProfile, LocalAppData, RoamingAppData,
             Path.Combine(Windows, "System32"), Path.Combine(Windows, "SysWOW64"), Path.Combine(Windows, "WinSxS"),
+            Path.Combine(SystemDrive, "Program Files"),
+            Path.Combine(UserProfile, "Documents"), Path.Combine(UserProfile, "Desktop"), Path.Combine(UserProfile, "Downloads"),
+            Path.Combine(UserProfile, "Pictures"), Path.Combine(UserProfile, "Videos"), Path.Combine(UserProfile, "Music"),
+            Path.Combine(UserProfile, "OneDrive"),
         };
+
+        /// <summary>Where Windows, apps and their files live: never offered for deletion from the File lớn page.</summary>
+        public string[] SystemAreas => new[] { Windows, ProgramData, ProgramFilesX86, Path.Combine(SystemDrive, "Program Files") };
     }
 }

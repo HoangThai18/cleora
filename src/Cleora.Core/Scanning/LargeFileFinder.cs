@@ -16,7 +16,8 @@ namespace Cleora.Core.Scanning
     /// </summary>
     public static class LargeFileFinder
     {
-        public static LargeScan Find(string root, int top, long minBytes, IProgress<int>? progress = null, CancellationToken cancel = default)
+        /// <param name="listable">Files the user may act on; the rest still count in folder sizes (Windows, Program Files).</param>
+        public static LargeScan Find(string root, int top, long minBytes, IProgress<int>? progress = null, CancellationToken cancel = default, Func<string, bool>? listable = null)
         {
             var best = new SortedSet<FoundFile>(BySizeThenPath.Instance);
             var folders = new Dictionary<string, (long Bytes, int Files)>(StringComparer.OrdinalIgnoreCase);
@@ -33,7 +34,7 @@ namespace Cleora.Core.Scanning
                 folders.TryGetValue(top1, out var sum);
                 folders[top1] = (sum.Bytes + file.Length, sum.Files + 1);
 
-                if (file.Length >= minBytes)
+                if (file.Length >= minBytes && (listable == null || listable(file.Path)))
                 {
                     best.Add(file);
                     if (best.Count > top)
